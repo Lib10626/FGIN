@@ -1,7 +1,7 @@
-# Fine-Grained Generative Adversarial Net(FG-GAN)
+# Fine-Grained Imagination Net for Zero-Shot Learning(FGIN)
 This repo contains PyTorch code for paper:
 
-"Fine-Grained Generative Adversarial Net Based Semantic Imagining Model for Zero-Shot Learning"
+"Fine-Grained Imagination Net for Zero-Shot Learning"
 
 ## Requirements
 - Python 3.6+
