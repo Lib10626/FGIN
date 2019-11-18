@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 
 rdc_text_dim = 1000
-z_dim = 100
-h_dim = 4096
+z_dim = 7
+h_dim = 256
 
 class _param:
     def __init__(self):
@@ -32,16 +32,20 @@ class _netD(nn.Module):
     def __init__(self, y_dim=150, X_dim=3584):
         super(_netD, self).__init__()
         # Discriminator net layer one
-        self.D_shared = nn.Sequential(nn.Linear(X_dim, h_dim),
+        self.D_shared = nn.Sequential(nn.Linear(X_dim, 2*h_dim),
                                       nn.ReLU())
-        # Discriminator net branch one: For Gan_loss
+        self.D_new = nn.Linear(h_dim*2,h_dim)
+        # ==========================================================
         self.D_gan = nn.Linear(h_dim, 1)
         # Discriminator net branch two: For aux cls loss
         self.D_aux = nn.Linear(h_dim, y_dim)
+        # self.D_label = nn.Linear(2*y_dim,y_dim)
+        self.D_part = nn.Linear(h_dim,7)
 
     def forward(self, input):
-        h = self.D_shared(input)
-        return self.D_gan(h), self.D_aux(h)
+        new = self.D_shared(input)
+        h = self.D_new(new)
+        return self.D_gan(h),self.D_aux(h),self.D_part(h)
 
 # In GBU setting, using attribute
 class _netG_att(nn.Module):

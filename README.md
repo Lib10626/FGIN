@@ -6,6 +6,7 @@ This repo contains PyTorch code for paper:
 ## Requirements
 - Python 3.6+
 - PyTorch 0.4
+- Sklearn
 
 ## Datasets
 ### Downloading

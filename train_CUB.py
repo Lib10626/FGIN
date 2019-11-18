@@ -19,9 +19,72 @@ import json
 from dataset import FeatDataLayer, LoadDataset
 from models import _netD, _netG, _param
 
+def trans(x):
+    result = []
+    for m in range(x.shape[0]):
+        for n in range(7):
+            result.append(x[m])
+    result = np.array(result)
+
+    return result 
+
+def trans2(x):
+    result = x[0]
+    for i in range(6):
+        result = torch.cat([result,x],0)
+
+    return result
+
+def partlabel(num):
+    result = []
+
+    for i in range(num):
+        for k in range(7):
+            result.append(k)
+    
+    return np.array(result)
+
+def imageprocess(img):
+    result = []
+
+    for i in range(img.shape[0]):
+        for k in range(7):
+            result.append(img[i][k*512:(k+1)*512])
+    
+    return np.array(result)
+
+def merge(data):
+    result = data[0]
+    for n in range(6):
+        result = torch.cat([result, data[n+1]], 0)
+
+    for m in range(data.shape[0]//7-1):
+        temp = data[7*m+n+7]
+        for n in range(6):
+            temp = torch.cat([temp, data[7*m+n+8]], 0)
+        result = torch.cat([result, temp], 0)
+    
+    result = torch.reshape(result,[1000,7*512])
+    return result
+
+def merge2(data):
+    result = data[0]
+    for n in range(6):
+        result = torch.cat([result, data[n+1]], 0)
+
+    for m in range(data.shape[0]//7-1):
+        temp = data[7*m+n+7]
+        for n in range(6):
+            temp = torch.cat([temp, data[7*m+n+8]], 0)
+        result = torch.cat([result, temp], 0)
+    
+    result = torch.reshape(result,[60,7*512])
+    return result
+# =============================================
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--gpu', default='0', type=str, help='index of GPU to use')
-parser.add_argument('--splitmode', default='easy', type=str, help='the way to split train/test data: easy/hard')
+parser.add_argument('--splitmode', default='hard', type=str, help='the way to split train/test data: easy/hard')
 parser.add_argument('--manualSeed', type=int, help='manual seed')
 parser.add_argument('--resume',  type=str, help='the model to resume')
 parser.add_argument('--disp_interval', type=int, default=20)
@@ -58,6 +121,7 @@ torch.cuda.manual_seed_all(opt.manualSeed)
 
 
 def train():
+# def train():
     param = _param()
     dataset = LoadDataset(opt)
     param.X_dim = dataset.feature_dim
@@ -66,13 +130,13 @@ def train():
     data_layer = FeatDataLayer(dataset.labels_train, dataset.pfc_feat_data_train, opt)
     result = Result()
     result_gzsl = Result()
-    netG = _netG(dataset.text_dim, dataset.feature_dim).cuda()
+    netG = _netG(dataset.text_dim, dataset.feature_dim//7).cuda()
     netG.apply(weights_init)
     print(netG)
-    netD = _netD(dataset.train_cls_num, dataset.feature_dim).cuda()
+    # netD = _netD(dataset.train_cls_num, dataset.feature_dim).cuda()
+    netD = _netD(dataset.train_cls_num, dataset.feature_dim//7).cuda()
     netD.apply(weights_init)
     print(netD)
-    # ===================================================================
 
     exp_info = 'CUB_EASY' if opt.splitmode == 'easy' else 'CUB_HARD'
     exp_params = 'Eu{}_Rls{}_RWz{}'.format(opt.CENT_LAMBDA , opt.REG_W_LAMBDA, opt.REG_Wz_LAMBDA)
@@ -113,29 +177,35 @@ def train():
 
     for it in range(start_step, 3000+1):
         """ Discriminator """
-        for _ in range(5):
+        for _ in range(6):
+        # --------------------------------------------
             blobs = data_layer.forward()
             feat_data = blobs['data']             # image data
+            feat_data = imageprocess(feat_data)
             labels = blobs['labels'].astype(int)  # class labels
+            labels = trans(labels)
+            partclass = partlabel(opt.batchsize)
             text_feat = np.array([dataset.train_text_feature[i,:] for i in labels])
             text_feat = Variable(torch.from_numpy(text_feat.astype('float32'))).cuda()
             X = Variable(torch.from_numpy(feat_data)).cuda()
             y_true = Variable(torch.from_numpy(labels.astype('int'))).cuda()
-            z = Variable(torch.randn(opt.batchsize, param.z_dim)).cuda()
+            part_true = Variable(torch.from_numpy(partclass.astype('int'))).cuda()
+            z = torch.zeros((opt.batchsize*7, 7)).scatter_(1, part_true.type(torch.LongTensor).unsqueeze(1), 1).cuda()
 
-            # GAN's D loss
-            D_real, C_real = netD(X)
+            D_real, C_real, C_part_real = netD(X)
             D_loss_real = torch.mean(D_real)
             C_loss_real = F.cross_entropy(C_real, y_true.long())
-            DC_loss = -D_loss_real + C_loss_real
+            C_loss_real_part = F.cross_entropy(C_part_real,part_true.long())
+            DC_loss = -D_loss_real + C_loss_real + C_loss_real_part
             DC_loss.backward()
 
             # GAN's D loss
             G_sample = netG(z, text_feat).detach()
-            D_fake, C_fake = netD(G_sample)
+            D_fake, C_fake, C_fake_part = netD(G_sample)
             D_loss_fake = torch.mean(D_fake)
             C_loss_fake = F.cross_entropy(C_fake, y_true.long())
-            DC_loss = D_loss_fake + C_loss_fake
+            C_loss_fake_part = F.cross_entropy(C_fake_part,part_true.long())
+            DC_loss = D_loss_fake + C_loss_fake + C_loss_fake_part
             DC_loss.backward()
 
             # train with gradient penalty (WGAN_GP)
@@ -150,30 +220,35 @@ def train():
         for _ in range(1):
             blobs = data_layer.forward()
             feat_data = blobs['data']  # image data
+            miukka_go = feat_data
+            feat_data = imageprocess(feat_data)
             labels = blobs['labels'].astype(int)  # class labels
+            labels = trans(labels)
+            partclass = partlabel(opt.batchsize)
             text_feat = np.array([dataset.train_text_feature[i, :] for i in labels])
             text_feat = Variable(torch.from_numpy(text_feat.astype('float32'))).cuda()
-
             X = Variable(torch.from_numpy(feat_data)).cuda()
             y_true = Variable(torch.from_numpy(labels.astype('int'))).cuda()
-            z = Variable(torch.randn(opt.batchsize, param.z_dim)).cuda()
+            part_true = Variable(torch.from_numpy(partclass.astype('int'))).cuda()
+            z = torch.zeros((opt.batchsize*7, 7)).scatter_(1, part_true.type(torch.LongTensor).unsqueeze(1), 1).cuda()
 
             G_sample = netG(z, text_feat)
-            D_fake, C_fake = netD(G_sample)
-            _,      C_real = netD(X)
+            D_fake, C_fake, C_fake_part = netD(G_sample)
+            _,      C_real, C_real_part = netD(X)
 
             # GAN's G loss
             G_loss = torch.mean(D_fake)
             # Auxiliary classification loss
             C_loss = (F.cross_entropy(C_real, y_true.long()) + F.cross_entropy(C_fake, y_true.long()))/2
-
-            GC_loss = -G_loss + C_loss
+            C_loss_part = (F.cross_entropy(C_real_part, part_true.long()) + F.cross_entropy(C_fake_part, part_true.long()))/2
+            GC_loss = -G_loss + C_loss + C_loss_part
+            G_sample = merge(G_sample)
 
             # Centroid loss
             Euclidean_loss = Variable(torch.Tensor([0.0])).cuda()
             if opt.CENT_LAMBDA != 0:
                 for i in range(dataset.train_cls_num):
-                    sample_idx = (y_true == i).data.nonzero().squeeze()
+                    sample_idx = ((y_true == i).data.nonzero().squeeze() + 1)//7 - 1
                     if sample_idx.numel() == 0:
                         Euclidean_loss += 0.0
                     else:
@@ -181,7 +256,6 @@ def train():
                         Euclidean_loss += (G_sample_cls.mean(dim=0) - tr_cls_centroid[i]).pow(2).sum().sqrt()
                 Euclidean_loss *= 1.0/dataset.train_cls_num * opt.CENT_LAMBDA
 
-            # ||W||_2 regularization
             reg_loss = Variable(torch.Tensor([0.0])).cuda()
             if opt.REG_W_LAMBDA != 0:
                 for name, p in netG.named_parameters():
@@ -189,16 +263,20 @@ def train():
                         reg_loss += p.pow(2).sum()
                 reg_loss.mul_(opt.REG_W_LAMBDA)
 
-            # ||W_z||21 regularization, make W_z sparse
             reg_Wz_loss = Variable(torch.Tensor([0.0])).cuda()
             if opt.REG_Wz_LAMBDA != 0:
                 Wz = netG.rdc_text.weight
                 reg_Wz_loss = Wz.pow(2).sum(dim=0).sqrt().sum().mul(opt.REG_Wz_LAMBDA)
 
+            G_loss_func = torch.nn.L1Loss()
+            G_loss2 = G_loss_func(G_sample,Variable(torch.from_numpy(miukka_go)).cuda()) * 10
+            GC_loss = GC_loss + G_loss2
+
             all_loss = GC_loss + Euclidean_loss + reg_loss + reg_Wz_loss
             all_loss.backward()
             optimizerG.step()
             reset_grad(nets)
+
 
         if it % opt.disp_interval == 0 and it:
             acc_real = (np.argmax(C_real.data.cpu().numpy(), axis=1) == y_true.data.cpu().numpy()).sum() / float(y_true.data.size()[0])
@@ -239,18 +317,53 @@ def train():
                 },  out_subdir + '/Iter_{:d}.tar'.format(it))
             print('Save model to ' + out_subdir + '/Iter_{:d}.tar'.format(it))
 
+    return result
+
 
 def eval_fakefeat_test(it, netG, dataset, param, result):
+    # ------------------------------------------------------------------------
+    train_gen_feat = np.zeros([0, param.X_dim])
+    for i in range(dataset.train_cls_num):
+        text_feat = np.tile(dataset.train_text_feature[i].astype('float32'), (opt.nSample*7, 1))
+        text_feat = Variable(torch.from_numpy(text_feat)).cuda()
+
+        part_true = torch.from_numpy(partlabel(opt.nSample)).cuda()
+        z = torch.zeros((text_feat.shape[0], 7)).scatter_(1, part_true.type(torch.LongTensor).unsqueeze(1), 1).cuda()
+        G_sample = netG(z, text_feat)
+        G_sample = merge2(G_sample)
+        train_gen_feat = np.vstack((train_gen_feat, G_sample.data.cpu().numpy()))
+
+    sim = cosine_similarity(dataset.pfc_feat_data_train, train_gen_feat)
+
+    idx_mat = np.argsort(-1 * sim, axis=1)
+    label_mat = (idx_mat[:, 0:opt.Knn] / opt.nSample).astype(int)
+    preds = np.zeros(label_mat.shape[0])
+    for i in range(label_mat.shape[0]):
+        (values, counts) = np.unique(label_mat[i], return_counts=True)
+        preds[i] = values[np.argmax(counts)]
+
+    # produce acc
+    label_T = np.asarray(dataset.labels_train)
+    train_acc = (preds == label_T).mean() * 100
+    # ------------------------------------------------------------------------
+
+
     gen_feat = np.zeros([0, param.X_dim])
     for i in range(dataset.test_cls_num):
-        text_feat = np.tile(dataset.test_text_feature[i].astype('float32'), (opt.nSample, 1))
+
+        text_feat = np.tile(dataset.test_text_feature[i].astype('float32'), (opt.nSample*7, 1))
         text_feat = Variable(torch.from_numpy(text_feat)).cuda()
-        z = Variable(torch.randn(opt.nSample, param.z_dim)).cuda()
+
+        part_true = torch.from_numpy(partlabel(opt.nSample)).cuda()
+        z = torch.zeros((text_feat.shape[0], 7)).scatter_(1, part_true.type(torch.LongTensor).unsqueeze(1), 1).cuda()
         G_sample = netG(z, text_feat)
+        G_sample = merge2(G_sample)
         gen_feat = np.vstack((gen_feat, G_sample.data.cpu().numpy()))
 
     # cosince predict K-nearest Neighbor
+
     sim = cosine_similarity(dataset.pfc_feat_data_test, gen_feat)
+
     idx_mat = np.argsort(-1 * sim, axis=1)
     label_mat = (idx_mat[:, 0:opt.Knn] / opt.nSample).astype(int)
     preds = np.zeros(label_mat.shape[0])
@@ -265,28 +378,42 @@ def eval_fakefeat_test(it, netG, dataset, param, result):
     result.acc_list += [acc]
     result.iter_list += [it]
     result.save_model = False
-    if acc > result.best_acc:
+
+    if train_acc > result.train_best_acc:
+        result.train_best_acc = train_acc
+
+    if acc > result.best_acc and train_acc >= result.train_best_acc:
+        result.train_best_acc = train_acc
+    # ------------------------
         result.best_acc = acc
         result.best_iter = it
         result.save_model = True
     print("{}nn Classifier: ".format(opt.Knn))
     print("Accuracy is {:.4}%".format(acc))
+    print("Best: {:.4}%".format(result.best_acc))
 
 """ Generalized ZSL"""
 def eval_fakefeat_GZSL(it, netG, dataset, param, result):
     gen_feat = np.zeros([0, param.X_dim])
     for i in range(dataset.train_cls_num):
-        text_feat = np.tile(dataset.train_text_feature[i].astype('float32'), (opt.nSample, 1))
+
+        text_feat = np.tile(dataset.train_text_feature[i].astype('float32'), (opt.nSample*7, 1))
         text_feat = Variable(torch.from_numpy(text_feat)).cuda()
-        z = Variable(torch.randn(opt.nSample, param.z_dim)).cuda()
+
+        part_true = torch.from_numpy(partlabel(opt.nSample)).cuda()
+        z = torch.zeros((text_feat.shape[0], 7)).scatter_(1, part_true.type(torch.LongTensor).unsqueeze(1), 1).cuda()
         G_sample = netG(z, text_feat)
+        G_sample = merge2(G_sample)
         gen_feat = np.vstack((gen_feat, G_sample.data.cpu().numpy()))
 
     for i in range(dataset.test_cls_num):
-        text_feat = np.tile(dataset.test_text_feature[i].astype('float32'), (opt.nSample, 1))
+        text_feat = np.tile(dataset.test_text_feature[i].astype('float32'), (opt.nSample*7, 1))
         text_feat = Variable(torch.from_numpy(text_feat)).cuda()
-        z = Variable(torch.randn(opt.nSample, param.z_dim)).cuda()
+
+        part_true = torch.from_numpy(partlabel(opt.nSample)).cuda()
+        z = torch.zeros((text_feat.shape[0], 7)).scatter_(1, part_true.type(torch.LongTensor).unsqueeze(1), 1).cuda()
         G_sample = netG(z, text_feat)
+        G_sample = merge2(G_sample)
         gen_feat = np.vstack((gen_feat, G_sample.data.cpu().numpy()))
 
     visual_pivots = [gen_feat[i*opt.nSample:(i+1)*opt.nSample].mean(0) \
@@ -314,19 +441,22 @@ def eval_fakefeat_GZSL(it, netG, dataset, param, result):
     result.acc_list += [auc_score]
     result.iter_list += [it]
     result.save_model = False
-    if auc_score > result.best_acc:
-        result.best_acc = auc_score
+    if auc_score > result.best_auc:
+        result.best_auc = auc_score
         result.best_iter = it
         result.save_model = True
     print("AUC Score is {:.4}".format(auc_score))
+    print("BEST AUC {:.4}".format(result.best_auc))
     
 class Result(object):
     def __init__(self):
         self.best_acc = 0.0
+        self.best_auc = 0.0
         self.best_iter = 0.0
         self.acc_list = []
         self.iter_list = []
         self.save_model = False
+        self.train_best_acc = 0.0
 
 def weights_init(m):
     classname = m.__class__.__name__
@@ -347,7 +477,7 @@ def label2mat(labels, y_dim):
 
 
 def calc_gradient_penalty(netD, real_data, fake_data):
-    alpha = torch.rand(opt.batchsize, 1)
+    alpha = torch.rand(opt.batchsize * 7, 1)
     alpha = alpha.expand(real_data.size())
     alpha = alpha.cuda()
 
@@ -355,7 +485,7 @@ def calc_gradient_penalty(netD, real_data, fake_data):
     interpolates = interpolates.cuda()
     interpolates = autograd.Variable(interpolates, requires_grad=True)
 
-    disc_interpolates, _ = netD(interpolates)
+    disc_interpolates, _, _ = netD(interpolates)
 
     gradients = autograd.grad(outputs=disc_interpolates, inputs=interpolates,
                               grad_outputs=torch.ones(disc_interpolates.size()).cuda(),
@@ -365,5 +495,6 @@ def calc_gradient_penalty(netD, real_data, fake_data):
 
 
 if __name__ == "__main__":
-    train()
 
+    result = train()
+    print(result.train_best_acc)

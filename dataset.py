@@ -24,8 +24,8 @@ class LoadDataset(object):
             train_cls_num = 160
             test_cls_num = 40
 
-        self.pfc_feat_data_train = sio.loadmat(pfc_feat_path_train)['pfc_feat'].astype(np.float32)[:,:512]
-        self.pfc_feat_data_test = sio.loadmat(pfc_feat_path_test)['pfc_feat'].astype(np.float32)[:,:512]
+        self.pfc_feat_data_train = sio.loadmat(pfc_feat_path_train)['pfc_feat'].astype(np.float32)
+        self.pfc_feat_data_test = sio.loadmat(pfc_feat_path_test)['pfc_feat'].astype(np.float32)
         print("pfc_feat_file: {} || {} ".format(pfc_feat_path_train, pfc_feat_path_test))
 
         self.train_cls_num = train_cls_num
