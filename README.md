@@ -11,7 +11,7 @@ This repo contains PyTorch code for paper:
 ### Downloading
 You can download the dataset [CUBird and NABird](https://drive.google.com/open?id=1YUcYHgv4HceHOzza8OGzMp092taKAAq1)
 
-Thanks to the contribution of [this paper](https://arxiv.org/pdf/1709.01148.pdf) to the dataset.
+Thanks to the contribution of this paper [Link the head to the "beak": Zero Shot Learning from Noisy Text Description at Part Precision](https://arxiv.org/pdf/1709.01148.pdf) to the dataset.
 
 ### Preparation
 After downloading the datasets above, move them to the `data/` folder, as follows:
