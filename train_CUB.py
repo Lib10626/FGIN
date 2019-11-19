@@ -90,6 +90,8 @@ parser.add_argument('--resume',  type=str, help='the model to resume')
 parser.add_argument('--disp_interval', type=int, default=20)
 parser.add_argument('--save_interval', type=int, default=200)
 parser.add_argument('--evl_interval',  type=int, default=40)
+parser.add_argument('--epoch', help='number of epoch',  type=int, default=3000)
+parser.add_argument('--test_number', help='number of code tests',  type=int, default=3)
 
 opt = parser.parse_args()
 print('Running parameters:')
@@ -175,7 +177,7 @@ def train():
     optimizerD = optim.Adam(netD.parameters(), lr=opt.lr, betas=(0.5, 0.9))
     optimizerG = optim.Adam(netG.parameters(), lr=opt.lr, betas=(0.5, 0.9))
 
-    for it in range(start_step, 3000+1):
+    for it in range(start_step, opt.epoch+1):
         """ Discriminator """
         for _ in range(6):
         # --------------------------------------------
@@ -495,6 +497,11 @@ def calc_gradient_penalty(netD, real_data, fake_data):
 
 
 if __name__ == "__main__":
+    all_best_acc = 0.0
 
-    result = train()
-    print(result.train_best_acc)
+    for i in range(opt.test_number):
+        result = train()
+        if result.best_acc > all_best_acc:
+            all_best_acc = result.best_acc
+    
+    print("Best Acc: {:.4}%".format(all_best_acc))

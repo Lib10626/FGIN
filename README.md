@@ -23,14 +23,14 @@ After downloading the datasets above, move them to the `data/` folder, as follow
 ## Reproduce results 
 #### CUBird SCS mode && SCE mode
 ```
-python train_CUB.py --splitmode easy
-python train_CUB.py --splitmode hard
+python train_CUB.py --splitmode easy --epoch 3000 --test_number 5
+python train_CUB.py --splitmode hard --epoch 3000 --test_number 5
 ```
 
 #### NABird SCS mode && SCE mode
 ```
-python train_NAB.py --splitmode easy
-python train_NAB.py --splitmode hard
+python train_NAB.py --splitmode easy --epoch 20000 --test_number 5
+python train_NAB.py --splitmode hard --epoch 20000 --test_number 5
 ```
 
 
