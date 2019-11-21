@@ -9,8 +9,7 @@ This repo contains PyTorch code for paper:
 
 ## Datasets
 ### Downloading
-You can download the dataset [CUBird and NABird](https://drive.google.com/drive/folders/1-mbUpoIBaRpdAQ5f818Wv84E4W89REy4?usp=sharing
-https://drive.google.com/drive/folders/1zo2YrPfK9IwdiSM240nOPnfMJ7E-lgvU?usp=sharing)
+You can download the dataset [CUBird and NABird](https://drive.google.com/drive/folders/1NS_e_r9-nTWlGhNcpKpY5X7Mwo3oVBL3?usp=sharing)
 
 Thanks to the contribution of this paper [Link the head to the "beak": Zero Shot Learning from Noisy Text Description at Part Precision](https://arxiv.org/pdf/1709.01148.pdf) to the dataset.
 
